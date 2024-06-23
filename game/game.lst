@@ -1,0 +1,667 @@
+     1                                      [bits 16]
+     2                                      [org 0x3EE4]
+     3 00000000 E96203                      jmp start
+     4                                  
+     5                                      ;data which will remain constant
+     6                                  
+     7                                      ;measures of the screen in pixels
+     8                                      screenWidth equ 320 
+     9                                      screenHeight equ 200
+    10                                  
+    11                                      ;measures of the bird in pixels
+    12                                      birdWidth equ 30
+    13                                      birdHeight equ 20
+    14                                      birdWingWidth equ 10
+    15                                      birdWingHeight equ 7
+    16                                      birdEyeSocketWidth equ 5
+    17                                      birdEyeSocketHeight equ 5
+    18                                      birdEyeWidth equ 2
+    19                                      birdEyeHeight equ 2
+    20 00000003 2D00                        birdHeightPosition dw 45; we dont set the x coordinate cause bird is movin ongly pu and down
+    21                                  
+    22                                      ;pipe measures there will be 3 pipes in the game
+    23                                      pipeWidth equ 40
+    24                                  
+    25                                      ;pipe one 
+    26                                      ;--------------------------
+    27                                      topPipeOneHeight equ 70
+    28 00000005 5A00                        topPipeOnePositionX dw 90
+    29 00000007 0000                        topPipeOnePositionY dw 0
+    30                                      bottomPipeOneHeight equ 30
+    31 00000009 5A00                        bottomPipeOnePositionX dw 90
+    32 0000000B 7C00                        bottomPipeOnePositionY dw 124
+    33                                      ;--------------------------
+    34                                  
+    35                                  
+    36                                      ;pipe two
+    37                                      ;--------------------------
+    38                                      topPipeTwoHeight equ 30
+    39 0000000D B400                        topPipeTwoPositionX dw 180
+    40 0000000F 0000                        topPipeTwoPositionY dw 0
+    41                                      bottomPipeTwoHeight equ 70
+    42 00000011 B400                        bottomPipeTwoPositionX dw 180
+    43 00000013 5400                        bottomPipeTwoPositionY dw 84
+    44                                      ;--------------------------
+    45                                  
+    46                                      ;pipe three
+    47                                      ;--------------------------
+    48                                      topPipeThreeHeight equ 40
+    49 00000015 0E01                        topPipeThreePositionX dw 270
+    50 00000017 0000                        topPipeThreePositionY dw 0
+    51                                      bottomPipeThreeHeight equ 40
+    52 00000019 0E01                        bottomPipeThreePositionX dw 270
+    53 0000001B 7200                        bottomPipeThreePositionY dw 114
+    54                                      ;--------------------------  
+    55                                  
+    56                                  
+    57                                      ;time variables
+    58 0000001D 00                          time_aux db 0 ; check for change in time
+    59                                  
+    60                                      sleep: 
+    61 0000001E 51                              push cx
+    62 0000001F B9FFFF                          mov cx, 0xffff
+    63                                              delay:
+    64 00000022 E2FE                                    loop delay
+    65 00000024 59                              pop cx
+    66 00000025 C3                              ret
+    67                                  
+    68                                      drawBackgroundWorld:
+    69 00000026 55                              push bp 
+    70 00000027 89E5                            mov bp, sp  
+    71 00000029 50                              push ax
+    72 0000002A 53                              push bx
+    73 0000002B 51                              push cx
+    74 0000002C 52                              push dx
+    75 0000002D 56                              push si
+    76 0000002E 57                              push di
+    77                                  
+    78 0000002F B90000                          mov cx, 0; initializing the x coordinate ie. the column
+    79 00000032 BA0000                          mov dx, 0; initializing the y coordinate ie. the row
+    80                                          beginDrawingSky:
+    81 00000035 B40C                                mov ah, 0ch; set configuration for the pixel
+    82 00000037 B00B                                mov al, 0xb; light blue color
+    83 00000039 B700                                mov bh, 0; page number
+    84 0000003B CD10                                int 10h; calling the interrupt to set the color
+    85 0000003D 41                                  inc cx; incrementing the x coordinate
+    86 0000003E 81F94001                            cmp cx, screenWidth; comparing the x coordinate with the width of the screen
+    87 00000042 75F1                                jne beginDrawingSky; 
+    88                                  
+    89 00000044 42                              inc dx; incrementing the y coordinate
+    90 00000045 B90000                          mov cx, 0; 
+    91 00000048 81FA9B00                        cmp dx, screenHeight - 45; doing this so that the bottom can become floor
+    92 0000004C 75E7                            jne beginDrawingSky; if the y coordinate is not equal to the height of the screen then jump to beginDrawing
+    93                                  
+    94                                  
+    95                                          beginDrawingFloor:
+    96 0000004E B40C                                mov ah, 0ch 
+    97 00000050 B006                                mov al, 0x6 
+    98 00000052 B700                                mov bh, 0
+    99 00000054 CD10                                int 10h
+   100 00000056 41                                  inc cx
+   101 00000057 81F94001                            cmp cx, screenWidth
+   102 0000005B 75F1                                jne beginDrawingFloor;
+   103                                  
+   104 0000005D 42                              inc dx
+   105 0000005E B90000                          mov cx, 0
+   106 00000061 81FAC800                        cmp dx, screenHeight
+   107 00000065 75E7                            jne beginDrawingFloor
+   108                                  
+   109 00000067 5F                              pop di
+   110 00000068 5E                              pop si
+   111 00000069 5A                              pop dx
+   112 0000006A 59                              pop cx
+   113 0000006B 5B                              pop bx
+   114 0000006C 58                              pop ax
+   115 0000006D 5D                              pop bp
+   116                                  
+   117 0000006E C3                              ret
+   118                                  
+   119                                      birdy:
+   120 0000006F 55                              push bp
+   121 00000070 89E5                            mov bp, sp
+   122 00000072 50                              push ax
+   123 00000073 53                              push bx
+   124 00000074 51                              push cx
+   125 00000075 52                              push dx
+   126 00000076 56                              push si
+   127 00000077 57                              push di
+   128                                  
+   129                                  
+   130 00000078 B90000                          mov cx, 0
+   131 0000007B 8B16[0300]                      mov dx, [birdHeightPosition]
+   132                                  
+   133                                  
+   134                                          beginDrawingBird:
+   135 0000007F B40C                                mov ah, 0ch
+   136 00000081 B00E                                mov al, 0xe
+   137 00000083 B700                                mov bh, 0
+   138 00000085 CD10                                int 10h
+   139                                  
+   140 00000087 41                                  inc cx
+   141 00000088 89C8                                mov ax, cx
+   142 0000008A 83E800                              sub ax, 0
+   143 0000008D 83F81E                              cmp ax, birdWidth
+   144 00000090 7EED                                jng beginDrawingBird
+   145                                  
+   146 00000092 B90000                              mov cx, 0
+   147 00000095 42                                  inc dx
+   148 00000096 89D0                                mov ax, dx
+   149 00000098 83E814                              sub ax, birdHeight
+   150 0000009B 3B06[0300]                          cmp ax, [birdHeightPosition]
+   151 0000009F 7EDE                                jng beginDrawingBird
+   152                                  
+   153                                  
+   154 000000A1 B90000                          mov cx, 0
+   155 000000A4 8B1E[0300]                      mov bx, [birdHeightPosition]
+   156 000000A8 83C307                          add bx, 7
+   157 000000AB 89DA                            mov dx, bx
+   158                                              
+   159                                          beginDrawingWing:
+   160 000000AD B40C                                mov ah, 0ch
+   161 000000AF B007                                mov al, 0x7
+   162 000000B1 B700                                mov bh, 0
+   163 000000B3 CD10                                int 10h
+   164                                  
+   165 000000B5 41                                  inc cx
+   166 000000B6 89C8                                mov ax, cx
+   167 000000B8 83E800                              sub ax, 0
+   168 000000BB 83F80A                              cmp ax, birdWingWidth
+   169 000000BE 7EED                                jng beginDrawingWing
+   170                                  
+   171 000000C0 B90000                              mov cx, 0
+   172 000000C3 42                                  inc dx
+   173 000000C4 89D0                                mov ax, dx
+   174 000000C6 83E807                              sub ax, birdWingHeight
+   175 000000C9 39D8                                cmp ax, bx
+   176 000000CB 7EE0                                jng beginDrawingWing
+   177                                  
+   178                                          
+   179 000000CD B91900                          mov cx, birdWidth - birdEyeSocketWidth
+   180 000000D0 8B16[0300]                      mov dx, [birdHeightPosition]
+   181                                  
+   182                                          beginDrawingEyeSocket:
+   183 000000D4 B40C                                mov ah, 0ch
+   184 000000D6 B00F                                mov al, 0xf
+   185 000000D8 B700                                mov bh, 0
+   186 000000DA CD10                                int 10h
+   187                                  
+   188 000000DC 41                                  inc cx
+   189 000000DD 89C8                                mov ax, cx
+   190 000000DF 83E819                              sub ax, birdWidth - birdEyeSocketWidth
+   191 000000E2 83F805                              cmp ax, birdEyeSocketWidth
+   192 000000E5 7EED                                jng beginDrawingEyeSocket
+   193                                  
+   194 000000E7 B91900                              mov cx, birdWidth - birdEyeSocketWidth
+   195 000000EA 42                                  inc dx
+   196 000000EB 89D0                                mov ax, dx
+   197 000000ED 83E805                              sub ax, birdEyeSocketHeight
+   198 000000F0 3B06[0300]                          cmp ax, [birdHeightPosition]
+   199 000000F4 7EDE                                jng beginDrawingEyeSocket
+   200                                  
+   201                                  
+   202 000000F6 B91C00                          mov cx, birdWidth - birdEyeWidth
+   203 000000F9 8B1E[0300]                      mov bx, [birdHeightPosition] 
+   204 000000FD 83C302                          add bx, 2
+   205 00000100 89DA                            mov dx, bx
+   206                                  
+   207                                          beginDrawingEyeBall:
+   208                                  
+   209 00000102 B40C                                mov ah, 0ch
+   210 00000104 B000                                mov al, 0x0
+   211 00000106 B700                                mov bh, 0
+   212 00000108 CD10                                int 10h
+   213                                  
+   214 0000010A 41                                  inc cx
+   215 0000010B 89C8                                mov ax, cx
+   216 0000010D 83E81C                              sub ax, birdWidth - birdEyeWidth
+   217 00000110 83F802                              cmp ax, birdEyeWidth
+   218 00000113 7EED                                jng beginDrawingEyeBall
+   219                                  
+   220 00000115 B91C00                              mov cx, birdWidth - birdEyeWidth
+   221 00000118 42                                  inc dx
+   222 00000119 89D0                                mov ax, dx
+   223 0000011B 83E802                              sub ax, birdEyeHeight
+   224 0000011E 39D8                                cmp ax, bx
+   225 00000120 7EE0                                jng beginDrawingEyeBall
+   226                                  
+   227 00000122 5F                              pop di
+   228 00000123 5E                              pop si
+   229 00000124 5A                              pop dx
+   230 00000125 59                              pop cx
+   231 00000126 5B                              pop bx
+   232 00000127 58                              pop ax
+   233 00000128 5D                              pop bp
+   234                                  
+   235 00000129 C3                              ret
+   236                                  
+   237                                  
+   238                                      skyTopforBirdy:
+   239 0000012A 55                              push bp
+   240 0000012B 89E5                            mov bp, sp
+   241 0000012D 50                              push ax
+   242 0000012E 53                              push bx
+   243 0000012F 51                              push cx
+   244 00000130 52                              push dx
+   245 00000131 56                              push si
+   246 00000132 57                              push di
+   247                                  
+   248 00000133 B91E00                          mov cx, birdWidth  ; x
+   249 00000136 8B16[0300]                      mov dx, [birdHeightPosition]; y
+   250                                          
+   251                                          LoopY:
+   252 0000013A B40C                                mov ah, 0ch
+   253 0000013C B00B                                mov al, 0xb
+   254 0000013E B700                                mov bh, 0
+   255 00000140 CD10                                int 10h
+   256                                  
+   257 00000142 E2F6                                loop LoopY
+   258                                  
+   259 00000144 B40C                                mov ah, 0ch
+   260 00000146 B00B                                mov al, 0xb
+   261 00000148 B700                                mov bh, 0
+   262 0000014A CD10                                int 10h
+   263                                  
+   264                                  
+   265 0000014C 5F                              pop di
+   266 0000014D 5E                              pop si
+   267 0000014E 5A                              pop dx
+   268 0000014F 59                              pop cx
+   269 00000150 5B                              pop bx
+   270 00000151 58                              pop ax
+   271 00000152 5D                              pop bp
+   272 00000153 C3                              ret
+   273                                  
+   274                                  
+   275                                      skyBottomforBirdy:
+   276                                  
+   277 00000154 55                              push bp
+   278 00000155 89E5                            mov bp, sp
+   279 00000157 50                              push ax
+   280 00000158 53                              push bx
+   281 00000159 51                              push cx
+   282 0000015A 52                              push dx
+   283 0000015B 56                              push si
+   284 0000015C 57                              push di
+   285                                  
+   286 0000015D B91E00                          mov cx, birdWidth ; x
+   287 00000160 8B16[0300]                      mov dx, [birdHeightPosition]; y
+   288 00000164 83C215                          add dx, birdHeight + 1
+   289                                  
+   290                                          loopYB:
+   291                                              
+   292 00000167 B40C                                mov ah, 0ch
+   293 00000169 B00B                                mov al, 0xb
+   294 0000016B B700                                mov bh, 0
+   295 0000016D CD10                                int 10h
+   296                                  
+   297 0000016F E2F6                                loop loopYB
+   298                                  
+   299 00000171 B40C                                mov ah, 0ch
+   300 00000173 B00B                                mov al, 0xb
+   301 00000175 B700                                mov bh, 0
+   302 00000177 CD10                                int 10h
+   303                                  
+   304                                          
+   305                                  
+   306 00000179 5F                              pop di
+   307 0000017A 5E                              pop si
+   308 0000017B 5A                              pop dx
+   309 0000017C 59                              pop cx
+   310 0000017D 5B                              pop bx
+   311 0000017E 58                              pop ax
+   312 0000017F 5D                              pop bp
+   313 00000180 C3                              ret
+   314                                  
+   315                                          drawPipe:
+   316 00000181 55                              push bp
+   317 00000182 89E5                            mov bp, sp
+   318 00000184 50                              push ax
+   319 00000185 53                              push bx
+   320 00000186 51                              push cx
+   321 00000187 52                              push dx
+   322 00000188 56                              push si
+   323 00000189 57                              push di
+   324                                  
+   325                                          ;getting through the stack the values of the pipe
+   326                                  
+   327                                          ;bp, bp+2 -> return address, bp+4 = bottomh, bp+6 = by, bp+8 bx, bp+10 = toph, bp+12 = topy, bp+14 = topx
+   328                                  
+   329                                  
+   330 0000018A 8B4E0E                          mov cx, [bp+14]; x
+   331 0000018D 8B560C                          mov dx, [bp+12]; y
+   332                                  
+   333                                          beginTopPipe:
+   334 00000190 B40C                                mov ah, 0ch
+   335 00000192 B002                                mov al, 0x2 ; green color
+   336 00000194 B700                                mov bh, 0
+   337 00000196 CD10                                int 10h
+   338                                  
+   339 00000198 41                                  inc cx
+   340 00000199 89C8                                mov ax, cx
+   341 0000019B 2B460E                              sub ax, [bp+14]
+   342 0000019E 83F828                              cmp ax, pipeWidth
+   343 000001A1 7EED                                jng beginTopPipe
+   344                                  
+   345 000001A3 8B4E0E                              mov cx, [bp+14]
+   346 000001A6 42                                  inc dx
+   347 000001A7 89D0                                mov ax, dx
+   348 000001A9 2B460A                              sub ax, [bp+10]
+   349 000001AC 3B460C                              cmp ax, [bp+12]
+   350 000001AF 7EDF                                jng beginTopPipe
+   351                                  
+   352                                  
+   353 000001B1 8B4E08                          mov cx, [bp+8]
+   354 000001B4 8B5606                          mov dx, [bp+6]
+   355                                  
+   356                                          beginbottomPipe:
+   357 000001B7 B40C                                mov ah, 0ch
+   358 000001B9 B002                                mov al, 0x2
+   359 000001BB B700                                mov bh, 0
+   360 000001BD CD10                                int 10h
+   361                                  
+   362 000001BF 41                                  inc cx
+   363 000001C0 89C8                                mov ax, cx
+   364 000001C2 2B4608                              sub ax, [bp+8]
+   365 000001C5 83F828                              cmp ax, pipeWidth
+   366 000001C8 7EED                                jng beginbottomPipe
+   367                                  
+   368 000001CA 8B4E08                              mov cx, [bp+8]
+   369 000001CD 42                                  inc dx
+   370 000001CE 89D0                                mov ax, dx
+   371 000001D0 2B4604                              sub ax, [bp+4]
+   372 000001D3 3B4606                              cmp ax, [bp+6]
+   373 000001D6 7EDF                                jng beginbottomPipe
+   374                                  
+   375                                  
+   376 000001D8 5F                              pop di
+   377 000001D9 5E                              pop si
+   378 000001DA 5A                              pop dx
+   379 000001DB 59                              pop cx
+   380 000001DC 5B                              pop bx
+   381 000001DD 58                              pop ax
+   382 000001DE 5D                              pop bp
+   383 000001DF C20C00                          ret 12
+   384                                  
+   385                                      cleanMovedPipe:
+   386                                  
+   387 000001E2 55                              push bp
+   388 000001E3 89E5                            mov bp, sp
+   389 000001E5 50                              push ax
+   390 000001E6 53                              push bx
+   391 000001E7 51                              push cx
+   392 000001E8 52                              push dx
+   393 000001E9 56                              push si
+   394 000001EA 57                              push di
+   395                                  
+   396                                          ;we want to move any general pipe from left to right slowly by moving it and covering the previous are with the background color
+   397                                          ;bp+4 = bottomh, bp+6 = by, bp+8 bx, bp+10 = toph, bp+12 = topy, bp+14 = topx
+   398                                  
+   399 000001EB 8B4E0E                          mov cx, [bp+14]; x
+   400 000001EE 83C128                          add cx, 40 ; x + width -> goes to last column
+   401 000001F1 8B560C                          mov dx, [bp+12]; y
+   402 000001F4 83EA01                          sub dx, 1
+   403 000001F7 8B460A                          mov ax, [bp+10]
+   404                                  
+   405                                          beginCleaningTopPipe:
+   406 000001FA B40C                                mov ah, 0ch
+   407 000001FC B00B                                mov al, 0xb
+   408 000001FE B700                                mov bh, 0
+   409 00000200 CD10                                int 10h
+   410                                  
+   411 00000202 42                                  inc dx
+   412 00000203 89D0                                mov ax, dx
+   413 00000205 3B460A                              cmp ax, [bp+10];
+   414 00000208 7EF0                                jng beginCleaningTopPipe
+   415                                  
+   416                                  
+   417                                  
+   418                                  
+   419                                  
+   420 0000020A 8B4E08                          mov cx, [bp+8]; x
+   421 0000020D 83C128                          add cx, 40
+   422 00000210 8B5606                          mov dx, [bp+6]; y
+   423                                  
+   424                                          beginCleaningBottomPipe:
+   425 00000213 B40C                                mov ah, 0ch
+   426 00000215 B00B                                mov al, 0xb
+   427 00000217 B700                                mov bh, 0
+   428 00000219 CD10                                int 10h
+   429                                  
+   430 0000021B 42                                  inc dx
+   431 0000021C 89D0                                mov ax, dx
+   432 0000021E 2B4606                              sub ax, [bp+6]
+   433 00000221 3B4604                              cmp ax, [bp+4]
+   434 00000224 7EED                                jng beginCleaningBottomPipe
+   435                                  
+   436 00000226 5F                              pop di
+   437 00000227 5E                              pop si
+   438 00000228 5A                              pop dx
+   439 00000229 59                              pop cx
+   440 0000022A 5B                              pop bx
+   441 0000022B 58                              pop ax
+   442 0000022C 5D                              pop bp
+   443 0000022D C20C00                          ret 12
+   444                                  
+   445                                  
+   446                                      pipeOne:
+   447                                  
+   448 00000230 FF36[0500]                      push word [topPipeOnePositionX]
+   449 00000234 FF36[0700]                      push word [topPipeOnePositionY]
+   450 00000238 6A46                            push word topPipeOneHeight
+   451 0000023A FF36[0900]                      push word [bottomPipeOnePositionX]
+   452 0000023E FF36[0B00]                      push word [bottomPipeOnePositionY]
+   453 00000242 6A1E                            push word bottomPipeOneHeight
+   454 00000244 E89BFF                          call cleanMovedPipe
+   455                                  
+   456                                          
+   457 00000247 832E[0500]01                    sub word [topPipeOnePositionX], 1
+   458 0000024C 832E[0900]01                    sub word [bottomPipeOnePositionX], 1
+   459                                  
+   460 00000251 FF36[0500]                      push word [topPipeOnePositionX]
+   461 00000255 FF36[0700]                      push word [topPipeOnePositionY]
+   462 00000259 6A46                            push word topPipeOneHeight
+   463 0000025B FF36[0900]                      push word [bottomPipeOnePositionX]
+   464 0000025F FF36[0B00]                      push word [bottomPipeOnePositionY]
+   465 00000263 6A1E                            push word bottomPipeOneHeight
+   466 00000265 E819FF                          call drawPipe
+   467                                  
+   468                                  
+   469 00000268 C3                              ret
+   470                                  
+   471                                      pipeTwo:
+   472 00000269 FF36[1500]                      push word [topPipeThreePositionX]
+   473 0000026D FF36[1700]                      push word [topPipeThreePositionY]
+   474 00000271 6A28                            push word topPipeThreeHeight
+   475 00000273 FF36[1900]                      push word [bottomPipeThreePositionX]
+   476 00000277 FF36[1B00]                      push word [bottomPipeThreePositionY]
+   477 0000027B 6A28                            push word bottomPipeThreeHeight
+   478                                  
+   479 0000027D E862FF                          call cleanMovedPipe
+   480                                  
+   481 00000280 832E[1500]01                    sub word [topPipeThreePositionX], 1
+   482 00000285 832E[1900]01                    sub word [bottomPipeThreePositionX], 1
+   483                                  
+   484 0000028A FF36[1500]                      push word [topPipeThreePositionX]
+   485 0000028E FF36[1700]                      push word [topPipeThreePositionY]
+   486 00000292 6A28                            push word topPipeThreeHeight
+   487 00000294 FF36[1900]                      push word [bottomPipeThreePositionX]
+   488 00000298 FF36[1B00]                      push word [bottomPipeThreePositionY]
+   489 0000029C 6A28                            push word bottomPipeThreeHeight
+   490                                  
+   491 0000029E E8E0FE                          call drawPipe
+   492                                  
+   493                                  
+   494 000002A1 C3                              ret
+   495                                  
+   496                                  
+   497                                      clrscr:
+   498 000002A2 06                              push es 
+   499 000002A3 50                              push ax 
+   500 000002A4 51                              push cx 
+   501 000002A5 57                              push di 
+   502 000002A6 B800B8                          mov ax, 0xb800 
+   503 000002A9 8EC0                            mov es, ax ; point es to video base 
+   504 000002AB 31FF                            xor di, di ; point di to top left column 
+   505 000002AD B82007                          mov ax, 0x0720 ; space char in normal attribute 
+   506 000002B0 B9D007                          mov cx, 2000 ; number of screen locations 
+   507 000002B3 FC                              cld ; auto increment mode 
+   508 000002B4 F3AB                            rep stosw ; clear the whole screen 
+   509 000002B6 5F                              pop di
+   510 000002B7 59                              pop cx 
+   511 000002B8 58                              pop ax 
+   512 000002B9 07                              pop es 
+   513 000002BA C3                              ret 
+   514                                  
+   515                                  
+   516                                      fallingBirdy:
+   517 000002BB 55                              push bp
+   518 000002BC 89E5                            mov bp, sp
+   519 000002BE 50                              push ax
+   520 000002BF 53                              push bx
+   521 000002C0 51                              push cx
+   522 000002C1 52                              push dx
+   523 000002C2 56                              push si
+   524 000002C3 57                              push di
+   525                                  
+   526 000002C4 E857FD                          call sleep 
+   527 000002C7 B90500                          mov cx, 5
+   528                                          loopMe:
+   529 000002CA E85DFE                          call skyTopforBirdy
+   530 000002CD 8306[0300]01                    add word [birdHeightPosition], 1
+   531 000002D2 E89AFD                          call birdy
+   532 000002D5 E846FD                          call sleep
+   533 000002D8 E2F0                            loop loopMe
+   534                                  
+   535 000002DA 5F                              pop di
+   536 000002DB 5E                              pop si
+   537 000002DC 5A                              pop dx
+   538 000002DD 59                              pop cx
+   539 000002DE 5B                              pop bx
+   540 000002DF 58                              pop ax
+   541 000002E0 5D                              pop bp
+   542 000002E1 C3                              ret
+   543                                  
+   544                                      jumpBirdy:
+   545 000002E2 55                              push bp
+   546 000002E3 89E5                            mov bp, sp
+   547 000002E5 50                              push ax
+   548 000002E6 53                              push bx
+   549 000002E7 51                              push cx
+   550 000002E8 52                              push dx
+   551 000002E9 56                              push si
+   552 000002EA 57                              push di
+   553                                  
+   554 000002EB E830FD                          call sleep
+   555                                          
+   556 000002EE B90B00                          mov cx, 11
+   557                                          loopM:
+   558 000002F1 832E[0300]01                    sub word [birdHeightPosition], 1
+   559 000002F6 E85BFE                          call skyBottomforBirdy  
+   560 000002F9 E873FD                          call birdy 
+   561 000002FC E2F3                            loop loopM
+   562                                          
+   563 000002FE 5F                              pop di
+   564 000002FF 5E                              pop si
+   565 00000300 5A                              pop dx
+   566 00000301 59                              pop cx
+   567 00000302 5B                              pop bx
+   568 00000303 58                              pop ax
+   569 00000304 5D                              pop bp
+   570 00000305 C3                              ret
+   571                                  
+   572                                  
+   573                                      checkClick:
+   574 00000306 55                              push bp
+   575 00000307 89E5                            mov bp, sp
+   576 00000309 50                              push ax
+   577 0000030A 53                              push bx
+   578 0000030B 51                              push cx
+   579 0000030C 52                              push dx
+   580 0000030D 56                              push si
+   581 0000030E 57                              push di
+   582                                  
+   583                                      
+   584 0000030F B401                            mov ah, 0x01
+   585 00000311 CD16                            int 0x16
+   586                                  
+   587 00000313 740B                            jz exitCheckClick
+   588                                  
+   589 00000315 B400                            mov ah, 0x00
+   590 00000317 CD16                            int 0x16
+   591 00000319 3C20                            cmp al, 0x20
+   592 0000031B 7503                            jne exitCheckClick
+   593                                  
+   594 0000031D E8C2FF                          call jumpBirdy
+   595                                  
+   596                                  
+   597                                          exitCheckClick:
+   598 00000320 5F                              pop di
+   599 00000321 5E                              pop si
+   600 00000322 5A                              pop dx
+   601 00000323 59                              pop cx
+   602 00000324 5B                              pop bx
+   603 00000325 58                              pop ax
+   604 00000326 5D                              pop bp
+   605 00000327 C3                              ret
+   606                                  
+   607                                  
+   608                                  
+   609                                      beginGame:
+   610                                  
+   611 00000328 55                              push bp
+   612 00000329 89E5                            mov bp, sp
+   613 0000032B 50                              push ax
+   614 0000032C 53                              push bx
+   615 0000032D 51                              push cx
+   616 0000032E 52                              push dx
+   617 0000032F 56                              push si
+   618 00000330 57                              push di
+   619                                  
+   620 00000331 8B0E[0300]                      mov cx, [birdHeightPosition]
+   621 00000335 83C114                          add cx, birdHeight
+   622                                          checkTime:
+   623                                  
+   624 00000338 B42C                                mov ah, 0x2c; getting system time
+   625 0000033A CD21                                int 21h;ch = hour, cl = minute, dh = second, dl = 1/100th of a second
+   626 0000033C 8836[1D00]                          mov [time_aux], dh 
+   627 00000340 E8C3FF                              call checkClick
+   628 00000343 E875FF                              call fallingBirdy
+   629 00000346 E8E7FE                              call pipeOne
+   630 00000349 E81DFF                              call pipeTwo
+   631                                  
+   632 0000034C 813E[0300]8700                      cmp word [birdHeightPosition], screenHeight - 65 ;ground
+   633 00000352 7D09                                jge exitGame
+   634                                          
+   635 00000354 833E[0300]06                        cmp word [birdHeightPosition], 6 ;sky
+   636 00000359 7E02                                jle exitGame
+   637                                  
+   638                                          loopBack: 
+   639 0000035B EBDB                                jmp checkTime 
+   640                                  
+   641                                  
+   642                                          exitGame:
+   643 0000035D 5F                                  pop di
+   644 0000035E 5E                                  pop si
+   645 0000035F 5A                                  pop dx
+   646 00000360 59                                  pop cx
+   647 00000361 5B                                  pop bx
+   648 00000362 58                                  pop ax
+   649 00000363 5D                                  pop bp
+   650 00000364 C3                                  ret
+   651                                  
+   652                                      start:
+   653                                  
+   654 00000365 B400                        mov ah, 0x00; setting the configuration for the video mode
+   655 00000367 B013                        mov al, 0x13; choosing the video mode which is 320x200 256 colors
+   656 00000369 CD10                        int 0x10; calling the interrupt to set the video mode i.e. execute the configuration
+   657                                      
+   658                                  
+   659                                  
+   660 0000036B E8B8FC                      call drawBackgroundWorld
+   661 0000036E E8FEFC                      call birdy
+   662 00000371 E8B4FF                      call beginGame
+   663                                  
+   664                                      terminate:
+   665 00000374 E82BFF                      call clrscr
+   666 00000377 B8004C                      mov ax, 0x4c00
+   667 0000037A CD21                        int 0x21

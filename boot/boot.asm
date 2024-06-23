@@ -1,0 +1,314 @@
+[BITS 16]
+[ORG 0X7C00]
+
+
+%DEFINE ENDL 0X0D, 0x0A ;ENDL SAME AS IN C++
+
+
+
+
+;
+; FAT12 HEADER
+; REFERENCE: https://wiki.osdev.org/FAT, https://en.wikipedia.org/wiki/Design_of_the_FAT_file_system
+; FORMAT REFERENCE: https://github.com/microsoft/MS-DOS/blob/main/v4.0/src/BOOT/MSBOOT.ASM
+; EXPLANATION IN NOTES
+;
+
+;BOOT SECTOR
+    JMP SHORT START
+    NOP
+    OEM_ID                      DB "MSWIN4.1"
+    BYTES_PER_SECTOR            DW 512
+    SECTORS_PER_CLUSTER         DB 1
+    RESERVED_SECTORS            DW 1
+    NUMBER_OF_FATS              DB 2
+    ROOT_DIR_ENTRIES            DW 0E0h ;14 ENTRIES PER SECTOR * 16 SECTORS
+    TOTAL_SECTORS               DW 2880
+    MEDIA_DESCRIPTOR            DB 0xF0
+    SECTORS_PER_FAT             DW 9
+    SECTORS_PER_TRACK           DW 18
+    NUMBER_OF_HEADS             DW 2
+    HIDDEN_SECTORS              DD 0
+
+
+;BOOT SECTOR EXTENSION
+    DRIVE_NUMBER                DB 0 ;0X00 FOR FLOPPY DISK, 0X80 FOR HARDDISK
+    RESERVED                    DB 0
+    EXTENDED_BOOT_SIGNATURE     DB 0x29
+    VOLUME_ID                   DD 0x12345678
+    VOLUME_LABEL                DB "  MYDEV  OS"
+    FILE_SYSTEM_TYPE            DB "FAT12   "
+
+
+
+START:
+    JMP MAIN
+
+;===================FUNCTIONS===================
+;PRINT A STRING
+;PARAMS: DS-SI POINTS TO THE STRING
+PRINT:
+    PUSHA
+
+    .LOOP:
+        LODSB ;LOAD BYTE FROM DS:SI INTO AL AND INCREMENT SI
+        OR AL, AL ;CHECK IF AL IS ZERO, I.E NEXT CHARACTER IS NULL
+        JZ .DONE ;IF ZERO, WE ARE DONE
+
+        MOV AH, 0x0E ;TELETYPE OUTPUT
+        MOV BH, 0x00 ;PAGE NUMBER
+        MOV BL, 0x07 ;TEXT COLOR
+        INT 0x10 ;BIOS VIDEO SERVICES
+
+        JMP .LOOP
+    
+    .DONE:
+        POPA
+        RET
+;END OF PRINT FUNCTION
+
+
+;CLEAR A SCREEN
+;PARAMS: NONE
+
+CLRSCR:
+
+    PUSH ES 
+    PUSH AX
+    PUSH CX
+    PUSH DI
+
+    MOV AX, 0xB800
+    MOV ES, AX  ;ES POINTS TO VIDEO BASE
+    XOR DI, DI  ;DI POINTS TO TOP LEFT CORNER
+    MOV AX, 0x0720  ;SPACE CHAR IN NORMAL ATTRIBUTE
+    MOV CX, 2000    ;NUMBER OF SCREEN LOCATIONS
+    
+    CLD
+    REP STOSW    ;CLEAR THE WHOLE SCREEN
+
+    POP DI
+    POP CX
+    POP AX
+    POP ES
+    RET
+
+
+;
+;DISK ROUTINES
+;
+
+
+; CONVERT LOGICAL BLOCK ADDRESS TO CYLINDER, HEAD AND SECTOR
+; PARAMS:
+; -AX - LBA, 
+; RETURNS: 
+; -CX [BIT 0-5]: SECTOR NUMBER, [BIT 6-15]: CYLINDER NUMBER
+; -DH: HEAD NUMBER
+; REFERENCE: https://wiki.osdev.org/Disk_access_using_the_BIOS_(INT_13h)
+
+
+LBA_TO_CHS:
+
+    LEA SI, BREAKPOINT_MESSAGE_LBA
+    CALL PRINT
+
+
+    PUSH AX
+    PUSH DX
+
+
+    XOR DX, DX
+
+    DIV WORD [SECTORS_PER_TRACK]            ;AX = TEMP
+    INC DX                                  ;DX = SECTOR ;SECTOR IS 1 BASED NOT 0 BASED SO SHIT STARTS FROM 1,2,3..
+
+    MOV CX, DX                              ;TEMPOARY STORE SECTOR VALUE IN CX
+
+    XOR DX, DX
+    DIV WORD [NUMBER_OF_HEADS]               ;AX = CYLINDER, DX = HEAD
+
+    ;CURRENTLY     -->     AX = CYLINDER      DX = HEAD       CX = SECTOR 
+
+    MOV DH, DL 
+    MOV CH, AL
+    SHL AH, 6
+    OR CL, AH
+
+    POP AX 
+    MOV DL, AL
+    POP AX
+    RET
+
+
+;
+; READ FROM A DISK
+; PARAMS:
+;   - AX: CONTAINS LBA
+;   - CL: NUM OF SECTORS TO READ
+;   - DL: DRIVE NUMBER
+;   - ES:BX : MEM ADDRESS TO STORE THE READ DATA
+;REFERENCE: https://www.stanislavs.org/helppc/int_13-2.html
+;    
+READ_DISK:
+
+    PUSH AX
+    PUSH BX
+    PUSH CX 
+    PUSH DX
+    PUSH DI 
+
+    LEA SI, BREAKPOINT_MESSAGE_READ_DISK
+    CALL PRINT
+
+    PUSH CX
+    CALL LBA_TO_CHS
+
+    POP AX                              ;TRANSFERRING THE VALUE IN CX TO AL
+    MOV AH, 02 
+
+    MOV DI, 3
+
+    .RETRY_LOOP:
+        PUSHA
+        STC                             ;IF CARRY FLAG IS CLEARED THEN OPERATION SUCCESSFUL
+        INT 13H
+        JNC .RETRY_DONE
+
+        POPA 
+        CALL DISK_RESET                 ;IN CASE OF FAILIURE RESET THE DISK
+
+        DEC DI
+        TEST DI, DI
+        JNZ .RETRY_LOOP
+
+    .RETRY_FAIL:
+
+        MOV SI, RETRY_FAIL_MSG
+        CALL PRINT
+        HLT                             ;IN CASE OF FAILURE HALT THE SYSTEM
+
+        MOV AH, 0
+        INT 16H
+        JMP 0FFFFH:0000H                ;JUMP TO 0X0000:0XFFFF TO RESTART THE SYSTEM
+        JMP HALT_LOOP
+
+        
+
+
+    .RETRY_DONE:
+        POPA
+
+        POP DI
+        POP DX
+        POP CX
+        POP BX
+        POP AX
+
+
+        LEA SI, BREAKPOINT_MESSAGE_READ_DISK_ENDED
+        CALL PRINT
+
+        RET
+
+
+;
+; RESETS THE DISK
+; PARAMS: DL - DRIVE NUMBER
+; REFERENCE: https://www.stanislavs.org/helppc/int_13-2.html
+;
+
+DISK_RESET:
+    PUSHA
+
+    MOV AH, 00
+    STC
+    INT 13H
+
+    JC .DISK_RESET_FAIL
+
+    POPA
+    RET
+
+    .DISK_RESET_FAIL:
+        MOV SI, RETRY_FAIL_MSG
+        CALL PRINT
+        HLT
+
+        MOV AH, 0
+        INT 16H
+        JMP 0FFFFH:0000H                ;JUMP TO 0X0000:0XFFFF TO RESTART THE SYSTEM
+        JMP HALT_LOOP
+
+    
+
+
+
+;===================END OF FUNCTIONS===================
+
+
+
+
+
+;===================MAIN===================
+
+MAIN:
+    XOR AX, AX
+    MOV DS, AX
+    MOV ES, AX
+    
+    ;SETUP STACK IN A SAFE PLACE
+
+    STI                         ;STOP INTERRUPTS 
+    MOV SS, AX 
+    MOV AX, 0X7C00 
+    MOV SP, AX                  ;THIS LOCATION IS SAFE AS OUR ORG BEGINS AT 0X7C00
+                                ;AND THE STACK GROWS DOWNWARDS
+
+    CLI                         ;RESUME INTERRUPTS
+
+    ;TEST READ DISK
+
+    LEA SI, BREAKPOINT_MESSAGE
+    CALL PRINT
+
+    MOV [DRIVE_NUMBER], DL
+    MOV AX, 1                  ;LBA = 1
+    MOV CL, 27               ;NUMBER OF SECTORS TO READ ;THE GAME WILL BE AROUND 13.6KB SO WE WILL READ 27 SECTORS
+    MOV BX, 0x3EE4              ;DATA AFTER 0X0100
+    CALL READ_DISK
+
+    ; ;PRINT WELCOME MESSAGE
+    ; LEA SI, WELCOME_MSG         ;LOAD EFFECTIVE ADDRESS OF WELCOME_MSG INTO SI
+    ; CALL PRINT
+
+    ;JUMP TO GAME CODE OFFSET
+    JMP 0X3EE4
+
+
+    
+    CLI
+    HLT
+
+
+;===================END OF MAIN===================
+
+
+    HALT_LOOP:                  ;INFINITE LOOP TO HALT THE SYSTEM IN CASE OF FAILURE
+        CLI
+        HLT
+        JMP HALT_LOOP
+
+.DATA: ;ALWAYS PLACE THIS SHIT ON THE BOTTOM
+
+WELCOME_MSG DB "WELCOME TO WELA_OS", ENDL, 0
+RETRY_FAIL_MSG DB "DISK COULD NOT BE READ PROPERLY", ENDL, 0
+
+BREAKPOINT_MESSAGE: DB "MAIN PROG HAS BEGUN...", ENDL, 0
+BREAKPOINT_MESSAGE_LBA: DB "LBA PART HAS BEGUN..." ,ENDL, 0
+BREAKPOINT_MESSAGE_READ_DISK: DB "DISK READ HAS BEGUN", ENDL, 0
+BREAKPOINT_MESSAGE_READ_DISK_ENDED: DB "DISK READ HAS ENDED", ENDL, 0
+
+TIMES 510 - ($ - $$)            DB 0
+
+dw 0xAA55
